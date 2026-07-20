@@ -1419,6 +1419,39 @@ textarea {
   padding: 6px 9px;
 }
 
+.chatPendingReview {
+  background: #fbfcfc;
+  border: 1px solid #cfdbe1;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.chatPendingReview strong {
+  color: #172026;
+  font-size: 13px;
+}
+
+.chatPendingReview p {
+  color: #33444c;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chatPendingActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.chatPendingActions button {
+  min-height: 32px;
+  padding: 7px 12px;
+}
+
 .chatLog {
   display: grid;
   gap: 8px;

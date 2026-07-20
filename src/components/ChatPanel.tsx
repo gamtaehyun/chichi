@@ -13,6 +13,13 @@ interface Props {
 
 type PendingAttachment = FeedbackAttachment;
 
+interface PendingChatChange {
+  id: string;
+  message: string;
+  previousState: ChichiState;
+  nextState: ChichiState;
+}
+
 function fileToAttachment(file: File): Promise<PendingAttachment> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -54,6 +61,7 @@ export function ChatPanel({ state, contextProjectId, onStateChange }: Props) {
   const [message, setMessage] = useState("");
   const [chatLog, setChatLog] = useState<ChatHistoryEntry[]>([]);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [pendingChange, setPendingChange] = useState<PendingChatChange | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   async function handleFiles(files: FileList | null) {
@@ -89,20 +97,36 @@ export function ChatPanel({ state, contextProjectId, onStateChange }: Props) {
         readPresentationText: readPresentationTextFromBrowser
       });
 
-      onStateChange(result.state);
-      setChatLog((current) => [
-        createChatHistoryEntry({
-          message: result.message,
-          previousState: state,
-          nextState: result.state
-        }),
-        ...current
-      ]);
+      setPendingChange({
+        id: `pending-${Date.now()}`,
+        message: result.message,
+        previousState: state,
+        nextState: result.state
+      });
       setMessage("");
       setAttachments([]);
     } finally {
       setIsProcessing(false);
     }
+  }
+
+  function handleApplyPending() {
+    if (!pendingChange) return;
+
+    onStateChange(pendingChange.nextState);
+    setChatLog((current) => [
+      createChatHistoryEntry({
+        message: `적용 완료: ${pendingChange.message}`,
+        previousState: pendingChange.previousState,
+        nextState: pendingChange.nextState
+      }),
+      ...current
+    ]);
+    setPendingChange(null);
+  }
+
+  function handleCancelPending() {
+    setPendingChange(null);
   }
 
   function handleUndo(entryId: string) {
@@ -151,6 +175,20 @@ export function ChatPanel({ state, contextProjectId, onStateChange }: Props) {
         <span>{blocked ? `확인 필요: ${blocked.title}` : "막힌 작업 없음"}</span>
         <span>새 소스 {newSources.length}개</span>
       </div>
+      {pendingChange ? (
+        <div className="chatPendingReview">
+          <strong>적용 전 확인</strong>
+          <p>{pendingChange.message}</p>
+          <div className="chatPendingActions">
+            <button className="active" onClick={handleApplyPending} type="button">
+              적용
+            </button>
+            <button onClick={handleCancelPending} type="button">
+              취소
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="chatLog">
         {chatLog.map((item) => (
           <div className="message bot chatLogEntry" key={item.id}>
