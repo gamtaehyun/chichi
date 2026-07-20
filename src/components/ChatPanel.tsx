@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ClipboardEvent } from "react";
 import { ArrowUp, Plus } from "lucide-react";
+import { summarizeChatChange } from "../domain/chatChangeSummary";
 import { createChatHistoryEntry, restoreChatHistoryEntry, type ChatHistoryEntry } from "../domain/chatHistory";
 import { processChatIntake } from "../domain/chatIntakeProcessor";
 import type { ChichiState, FeedbackAttachment } from "../domain/types";
@@ -16,6 +17,7 @@ type PendingAttachment = FeedbackAttachment;
 interface PendingChatChange {
   id: string;
   message: string;
+  summary: string[];
   previousState: ChichiState;
   nextState: ChichiState;
 }
@@ -100,6 +102,7 @@ export function ChatPanel({ state, contextProjectId, onStateChange }: Props) {
       setPendingChange({
         id: `pending-${Date.now()}`,
         message: result.message,
+        summary: summarizeChatChange(state, result.state),
         previousState: state,
         nextState: result.state
       });
@@ -178,6 +181,11 @@ export function ChatPanel({ state, contextProjectId, onStateChange }: Props) {
       {pendingChange ? (
         <div className="chatPendingReview">
           <strong>적용 전 확인</strong>
+          <ul className="chatPendingSummary">
+            {pendingChange.summary.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
           <p>{pendingChange.message}</p>
           <div className="chatPendingActions">
             <button className="active" onClick={handleApplyPending} type="button">

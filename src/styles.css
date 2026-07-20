@@ -1441,6 +1441,25 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.chatPendingSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chatPendingSummary li {
+  background: #eef3f5;
+  border: 1px solid #dce4e8;
+  border-radius: 999px;
+  color: #4f6169;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 5px 8px;
+}
+
 .chatPendingActions {
   display: flex;
   gap: 8px;
