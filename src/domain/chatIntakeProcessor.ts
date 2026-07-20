@@ -34,6 +34,25 @@ function today(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
+function formatWon(amount: number): string {
+  return `${amount.toLocaleString("ko-KR")}원`;
+}
+
+function sourceCheckKeyLabel(key: SourceCheckKey): string {
+  if (key === "plate-original") return "원본 플레이트";
+  if (key === "plate-beauty") return "뷰티 보정";
+  if (key === "3d") return "3D";
+  if (key === "fx") return "FX";
+  return "로토";
+}
+
+function sourceCheckStatusLabel(status: SourceCheckStatus): string {
+  if (status === "confirmed") return "확인";
+  if (status === "issue") return "문제";
+  if (status === "not-needed") return "없음";
+  return "미전달";
+}
+
 function cleanUrl(url: string): string {
   return url.replace(/[\]),.]+$/g, "");
 }
@@ -102,6 +121,34 @@ function findMentionedShot(project: Project, shots: Shot[], message: string): Sh
 function stripMentionedShotCode(message: string, shot?: Shot): string {
   if (!shot) return message.trim();
   return message.replace(new RegExp(`\\b${escapeRegExp(shot.code)}(?:\\s*번)?\\b`, "gi"), "").replace(/\s+/g, " ").trim();
+}
+
+function splitChatClauses(message: string): string[] {
+  return message
+    .split(/[\n.。]+/)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+}
+
+function isOperationalClause(message: string): boolean {
+  return Boolean(
+    hasReadableDateIntent(message) ||
+      readablePriorityFromText(message) ||
+      readableStatusFromText(message) ||
+      parseAssigneeCommand(message) ||
+      parseSourceChecklistCommands(message).length > 0 ||
+      parseFinanceCommand(message)
+  );
+}
+
+function extractFeedbackInstructionFromMixedCommand(message: string, shot?: Shot): string {
+  const baseInstruction = stripMentionedShotCode(message, shot);
+  if (!isOperationalClause(baseInstruction)) return baseInstruction;
+
+  return splitChatClauses(baseInstruction)
+    .map((clause) => stripMentionedShotCode(clause, shot))
+    .filter((clause) => clause.length >= 4 && !isOperationalClause(clause))
+    .join(". ");
 }
 
 function detectTaskStatus(message: string): WorkStatus | undefined {
@@ -264,7 +311,10 @@ function parseSourceChecklistCommand(message: string): SourceCheckKey[] {
 }
 
 function parseMoneyAmount(message: string): number | undefined {
-  const match = message.match(/(\d[\d,]*(?:\.\d+)?)\s*(\uC5B5|\uCC9C\uB9CC|\uBC31\uB9CC|\uB9CC)?\s*\uC6D0?/);
+  const matches = [...message.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(\uC5B5|\uCC9C\uB9CC|\uBC31\uB9CC|\uB9CC)?\s*(\uC6D0)?/g)];
+  const match =
+    matches.find((item) => Boolean(item[2] || item[3])) ??
+    matches.find((item) => item[1].includes(",") || item[1].replace(/,/g, "").length >= 5);
   if (!match) return undefined;
 
   const base = Number(match[1].replace(/,/g, ""));
@@ -449,6 +499,7 @@ export async function processChatIntake(state: ChichiState, rawMessage: string, 
   let assigneeChangeCount = 0;
   let checklistChangeCount = 0;
   let financeChangeCount = 0;
+  const summaryDetails: string[] = [];
 
   const requestedDate = /마감|납품|일자|due/i.test(intakeText) ? parseNaturalDate(intakeText, now) : undefined;
   const mentionedShot = requestedDate ? findMentionedShot(project, nextState.shots, intakeText) : undefined;
@@ -456,33 +507,41 @@ export async function processChatIntake(state: ChichiState, rawMessage: string, 
   if (requestedDate && mentionedShot) {
     nextState = updateShot(nextState, mentionedShot.id, { dueDate: requestedDate, deliveryDate: requestedDate });
     shotDateChangeCount = 1;
+    summaryDetails.push(`${mentionedShot.code} 마감 ${requestedDate}`);
   }
 
   const commandDate = hasReadableDateIntent(intakeText) ? parseReadableCommandDate(intakeText, now) : undefined;
   if (commandDate && hasProjectDeliveryDateIntent(intakeText) && !explicitlyMentionedShot) {
     nextState = updateProject(nextState, project.id, { deliveryDate: commandDate });
     projectDeliveryDateChangeCount = 1;
+    summaryDetails.push(`최종 납품일 ${commandDate}`);
   } else if (commandDate && explicitlyMentionedShot) {
     nextState = updateShot(nextState, explicitlyMentionedShot.id, { dueDate: commandDate, deliveryDate: commandDate });
     shotDateChangeCount = 1;
+    if (!summaryDetails.includes(`${explicitlyMentionedShot.code} 마감 ${commandDate}`)) {
+      summaryDetails.push(`${explicitlyMentionedShot.code} 마감 ${commandDate}`);
+    }
   }
 
   const requestedPriority = readablePriorityFromText(intakeText);
   if (requestedPriority && explicitlyMentionedShot) {
     nextState = updateShot(nextState, explicitlyMentionedShot.id, { priority: requestedPriority });
     priorityChangeCount = 1;
+    summaryDetails.push(`${explicitlyMentionedShot.code} 우선순위 ${requestedPriority}`);
   }
 
   const requestedAssignee = parseAssigneeCommand(intakeText);
   if (requestedAssignee && fallbackShot) {
     nextState = updateShot(nextState, fallbackShot.id, { assignedTo: requestedAssignee });
     assigneeChangeCount = 1;
+    summaryDetails.push(`${fallbackShot.code} 담당 ${requestedAssignee}`);
   }
 
   const requestedChecklistUpdates = parseSourceChecklistCommands(intakeText);
   if (requestedChecklistUpdates.length > 0 && fallbackShot) {
     requestedChecklistUpdates.forEach((item) => {
       nextState = updateShotSourceCheck(nextState, fallbackShot.id, item.key, { status: item.status, note: item.note });
+      summaryDetails.push(`${fallbackShot.code} ${sourceCheckKeyLabel(item.key)} ${sourceCheckStatusLabel(item.status)}`);
     });
     checklistChangeCount = requestedChecklistUpdates.length;
   }
@@ -497,6 +556,7 @@ export async function processChatIntake(state: ChichiState, rawMessage: string, 
       date: today(now)
     });
     financeChangeCount = 1;
+    summaryDetails.push(`${financeCommand.label} ${formatWon(financeCommand.amount)}`);
   }
 
   const sourceItems = parseSourceIntake(intakeText, project, nextState.shots, now.toISOString());
@@ -507,7 +567,7 @@ export async function processChatIntake(state: ChichiState, rawMessage: string, 
     });
   }
 
-  const feedbackInstruction = stripMentionedShotCode(instruction, fallbackShot);
+  const feedbackInstruction = extractFeedbackInstructionFromMixedCommand(instruction, fallbackShot);
   const parsedFeedback = parseFeedbackText([feedbackInstruction, attachmentText].filter(Boolean).join("\n"), "chichi-chat");
   const handledOperationalCommand =
     isOperationalCommand(intakeText) ||
@@ -518,7 +578,8 @@ export async function processChatIntake(state: ChichiState, rawMessage: string, 
     assigneeChangeCount > 0 ||
     checklistChangeCount > 0 ||
     financeChangeCount > 0;
-  const shouldCreateFeedback = (!shotListIntent && !newProjectName && !handledOperationalCommand) || attachments.length > 0;
+  const hasFeedbackInstruction = feedbackInstruction.length >= 4;
+  const shouldCreateFeedback = (!shotListIntent && !newProjectName && (!handledOperationalCommand || hasFeedbackInstruction)) || attachments.length > 0;
   const feedbackItems: ParsedFeedback[] = shouldCreateFeedback
     ? parsedFeedback.length
       ? parsedFeedback
@@ -550,6 +611,7 @@ export async function processChatIntake(state: ChichiState, rawMessage: string, 
         attachments,
         confidence: item.confidence
       });
+      summaryDetails.push(`${shot?.code ?? project.name} 피드백 1개`);
     });
   }
 
@@ -599,8 +661,26 @@ export async function processChatIntake(state: ChichiState, rawMessage: string, 
       ? " 슬라이드에서 샷을 읽지 못했어요. 슬라이드 권한을 확인하거나 텍스트를 붙여넣어 주세요."
       : "";
 
+  const countSummary = [
+    `새 프로젝트 ${createdProjectCount}개`,
+    `샷 ${createdShotCount}개`,
+    `컷별 작업 ${createdShotWorkCount}개`,
+    `링크 ${urls.length}개`,
+    `시트 읽기 ${successfulSheetReads}개`,
+    `슬라이드 읽기 ${successfulSlideReads}개`,
+    `마감 변경 ${shotDateChangeCount}개`,
+    `우선순위 변경 ${priorityChangeCount}개`,
+    `상태 변경 ${shotStatusChangeCount}개`,
+    `소스 ${sourceItems.length}개`,
+    `피드백 ${feedbackItems.length}개`,
+    `작업 ${taskChangeCount}개`,
+    `정산 ${financeChangeCount}개`
+  ];
+  const detailSummary = [...new Set(summaryDetails)].join(", ");
+  const summaryText = detailSummary ? `${detailSummary} (${countSummary.join(", ")})` : countSummary.join(", ");
+
   return {
     state: nextState,
-    message: `${project.name} 정리 완료: 새 프로젝트 ${createdProjectCount}개, 샷 ${createdShotCount}개, 컷별 작업 ${createdShotWorkCount}개, 링크 ${urls.length}개, 시트 ${spreadsheetUrls.length}개, 슬라이드 ${slideUrls.length}개, 시트 읽기 ${successfulSheetReads}개, 슬라이드 읽기 ${successfulSlideReads}개, 마감 변경 ${shotDateChangeCount}개, 우선순위 변경 ${priorityChangeCount}개, 상태 변경 ${shotStatusChangeCount}개, 소스 ${sourceItems.length}개, 피드백 ${feedbackItems.length}개, 작업 ${taskChangeCount}개를 반영했어요.${sheetWarning}${slideWarning}`
+    message: `${project.name} 정리 완료: ${summaryText}을 반영했어요.${sheetWarning}${slideWarning}`
   };
 }

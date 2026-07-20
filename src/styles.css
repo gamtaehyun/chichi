@@ -85,27 +85,6 @@ textarea {
   justify-content: flex-end;
 }
 
-.dataTools {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-}
-
-.dataTools label {
-  background: #fff;
-  border: 1px solid #cbd6dc;
-  border-radius: 6px;
-  color: #24343b;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 10px 14px;
-}
-
-.dataTools input {
-  display: none;
-}
-
 .mainLayout {
   display: grid;
   gap: 18px;
@@ -1443,6 +1422,18 @@ textarea {
 .chatLog {
   display: grid;
   gap: 8px;
+}
+
+.chatLogEntry {
+  align-items: start;
+  display: grid;
+  gap: 8px;
+}
+
+.chatUndoButton {
+  justify-self: end;
+  min-height: 30px;
+  padding: 7px 10px;
 }
 
 .financePage {

@@ -3,24 +3,7 @@ import { classifyPlateStatus, classifySourceType, extractVersion } from "./sourc
 import type { Project, Shot, SourceFile, SourceProvider } from "./types";
 
 const urlPattern = /https?:\/\/[^\s]+/gi;
-const sourceIntentWords = [
-  "source",
-  "plate",
-  "beauty",
-  "3d",
-  "cg",
-  "fx",
-  "roto",
-  "\uc18c\uc2a4",
-  "\ub4e4\uc5b4\uc654",
-  "\uc804\ub2ec",
-  "\uc5c5\ub85c\ub4dc",
-  "\ub9c1\ud06c",
-  "\ubc1b\uc558",
-  "\ud50c\ub808\uc774\ud2b8",
-  "\ubdf0\ud2f0",
-  "\ub85c\ud1a0"
-];
+const sourceIntentWords = ["source", "\uc18c\uc2a4", "\ub4e4\uc5b4\uc654", "\uc804\ub2ec", "\uc5c5\ub85c\ub4dc", "\ub9c1\ud06c"];
 
 function providerFromText(value: string): SourceProvider {
   const normalizedValue = value.toLowerCase();
@@ -81,7 +64,9 @@ function latestStatusForText(text: string, fileName: string): SourceFile["latest
 export function parseSourceIntake(text: string, project: Project, shots: Shot[], nowIso: string): SourceFile[] {
   const urls = text.match(urlPattern) ?? [];
   const normalizedText = text.toLowerCase();
-  const hasSourceIntent = sourceIntentWords.some((word) => normalizedText.includes(word.toLowerCase()));
+  const hasFileLikeText = /[A-Z0-9_-]+\.(?:exr|mov|mp4|png|jpg|jpeg|tif|tiff|abc|fbx|usd|usda|usdc)/i.test(text);
+  const hasVersionedSource = /\bv\s*\d{1,4}\b/i.test(text);
+  const hasSourceIntent = urls.length > 0 || hasFileLikeText || hasVersionedSource || sourceIntentWords.some((word) => normalizedText.includes(word.toLowerCase()));
   if (!hasSourceIntent && urls.length === 0) return [];
 
   const shot = findShotFromText(text, project, shots);

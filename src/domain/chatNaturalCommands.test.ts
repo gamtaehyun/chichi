@@ -85,4 +85,42 @@ describe("natural chat commands", () => {
       amount: 3000000
     });
   });
+
+  it("applies mixed schedule, checklist, feedback, and finance instructions from one message", async () => {
+    const result = await processChatIntake(
+      stateWithProjectAndShot(),
+      "BND_BBB C0014 마감일 7월 25일이고 FX는 문제 있어요. 밝은 부분 조금 눌러주세요. 총액 300만원 받았어요",
+      {
+        now: new Date("2026-07-20T00:00:00.000Z")
+      }
+    );
+
+    const shot = result.state.shots[0];
+    expect(shot.dueDate).toBe("2026-07-25");
+    expect(shot.sourceChecklist.find((item) => item.key === "fx")).toMatchObject({ status: "issue" });
+    expect(result.state.sources).toHaveLength(0);
+    expect(result.state.feedback).toHaveLength(1);
+    expect(result.state.feedback[0]).toMatchObject({
+      shotId: "shot-c0014",
+      instruction: "밝은 부분 조금 눌러주세요"
+    });
+    expect(result.state.finance[0]).toMatchObject({ label: "총액", amount: 3000000 });
+  });
+
+  it("returns a readable Korean summary with the changed shot and finance details", async () => {
+    const result = await processChatIntake(
+      stateWithProjectAndShot(),
+      "BND_BBB C0014 마감일 7월 25일이고 FX는 문제 있어요. 밝은 부분 조금 눌러주세요. 총액 300만원 받았어요",
+      {
+        now: new Date("2026-07-20T00:00:00.000Z")
+      }
+    );
+
+    expect(result.message).toContain("BND_BBB 정리 완료");
+    expect(result.message).toContain("C0014 마감 2026-07-25");
+    expect(result.message).toContain("C0014 FX 문제");
+    expect(result.message).toContain("C0014 피드백 1개");
+    expect(result.message).toContain("총액 3,000,000원");
+    expect(result.message).not.toMatch(/[�]/);
+  });
 });

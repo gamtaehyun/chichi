@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ClipboardEvent } from "react";
 import { ArrowUp, Plus } from "lucide-react";
+import { createChatHistoryEntry, restoreChatHistoryEntry, type ChatHistoryEntry } from "../domain/chatHistory";
 import { processChatIntake } from "../domain/chatIntakeProcessor";
 import type { ChichiState, FeedbackAttachment } from "../domain/types";
 
@@ -51,7 +52,7 @@ export function ChatPanel({ state, contextProjectId, onStateChange }: Props) {
   const blocked = state.tasks.find((task) => task.status === "blocked");
   const newSources = state.sources.filter((source) => source.changeStatus === "new");
   const [message, setMessage] = useState("");
-  const [chatLog, setChatLog] = useState<string[]>([]);
+  const [chatLog, setChatLog] = useState<ChatHistoryEntry[]>([]);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -89,12 +90,27 @@ export function ChatPanel({ state, contextProjectId, onStateChange }: Props) {
       });
 
       onStateChange(result.state);
-      setChatLog((current) => [result.message, ...current]);
+      setChatLog((current) => [
+        createChatHistoryEntry({
+          message: result.message,
+          previousState: state,
+          nextState: result.state
+        }),
+        ...current
+      ]);
       setMessage("");
       setAttachments([]);
     } finally {
       setIsProcessing(false);
     }
+  }
+
+  function handleUndo(entryId: string) {
+    const entry = chatLog.find((item) => item.id === entryId);
+    if (!entry || entry.undone) return;
+
+    onStateChange(restoreChatHistoryEntry(entry));
+    setChatLog((current) => current.map((item) => (item.id === entryId ? { ...item, canUndo: false, undone: true, message: `${item.message} 되돌렸어요.` } : item)));
   }
 
   return (
@@ -136,9 +152,14 @@ export function ChatPanel({ state, contextProjectId, onStateChange }: Props) {
         <span>새 소스 {newSources.length}개</span>
       </div>
       <div className="chatLog">
-        {chatLog.map((item, index) => (
-          <div className="message bot" key={`${item}-${index}`}>
-            {item}
+        {chatLog.map((item) => (
+          <div className="message bot chatLogEntry" key={item.id}>
+            <span>{item.message}</span>
+            {item.canUndo && !item.undone ? (
+              <button className="chatUndoButton" onClick={() => handleUndo(item.id)} type="button">
+                되돌리기
+              </button>
+            ) : null}
           </div>
         ))}
       </div>

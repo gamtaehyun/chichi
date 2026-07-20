@@ -1,28 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ChangeEvent } from "react";
 import { Dashboard } from "./components/Dashboard";
 import { FinancePanel } from "./components/FinancePanel";
 import { ProjectDetailPage } from "./components/ProjectDetailPage";
 import { TaskHistoryPanel } from "./components/TaskHistoryPanel";
 import { applySourceChecklistRules } from "./domain/stateActions";
-import type { ChichiState } from "./domain/types";
 import { loadState, saveState } from "./storage/localStore";
 
 type ActiveTab = "dashboard" | "tasks" | "finance";
-
-function isChichiState(value: unknown): value is ChichiState {
-  if (!value || typeof value !== "object") return false;
-
-  const candidate = value as Partial<ChichiState>;
-  return (
-    Array.isArray(candidate.projects) &&
-    Array.isArray(candidate.shots) &&
-    Array.isArray(candidate.sources) &&
-    Array.isArray(candidate.feedback) &&
-    Array.isArray(candidate.tasks) &&
-    Array.isArray(candidate.finance)
-  );
-}
 
 export default function App() {
   const initialState = useMemo(() => loadState(), []);
@@ -37,43 +21,6 @@ export default function App() {
   useEffect(() => {
     setState((currentState) => applySourceChecklistRules(currentState));
   }, [state.sources]);
-
-  function handleExportBackup() {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    const date = new Date().toISOString().slice(0, 10);
-
-    link.href = url;
-    link.download = `vfx-schedule-backup-${date}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function handleImportBackup(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result));
-        if (!isChichiState(parsed)) {
-          window.alert("백업 파일 형식이 맞지 않습니다.");
-          return;
-        }
-
-        if (window.confirm("현재 데이터를 백업 파일 내용으로 교체할까요?")) {
-          setSelectedProjectId(null);
-          setState(parsed);
-        }
-      } catch {
-        window.alert("백업 파일을 읽지 못했습니다.");
-      }
-    };
-    reader.readAsText(file);
-  }
 
   return (
     <main className="app">
@@ -112,15 +59,6 @@ export default function App() {
               정산
             </button>
           </nav>
-          <div className="dataTools" aria-label="데이터 백업과 복원">
-            <button onClick={handleExportBackup} type="button">
-              백업
-            </button>
-            <label>
-              복원
-              <input accept="application/json" onChange={handleImportBackup} type="file" />
-            </label>
-          </div>
         </div>
       </header>
       <div className="mainLayout">
