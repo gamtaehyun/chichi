@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+*.log
+vite-dev*.log
+
+.DS_Store
+Thumbs.db
+
+.agents/
+.codex/
+outputs/
+work/
